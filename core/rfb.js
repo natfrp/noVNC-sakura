@@ -176,9 +176,6 @@ export default class RFB extends EventTargetMixin {
         this._mousePos = {};
         this._mouseButtonMask = 0;
         this._mouseLastMoveTime = 0;
-        this._viewportDragging = false;
-        this._viewportDragPos = {};
-        this._viewportHasMoved = false;
         this._accumulatedWheelDeltaX = 0;
         this._accumulatedWheelDeltaY = 0;
 
@@ -267,14 +264,9 @@ export default class RFB extends EventTargetMixin {
 
         // ===== PROPERTIES =====
 
-        this.dragViewport = false;
         this.focusOnClick = true;
 
         this._viewOnly = false;
-        this._clipViewport = false;
-        this._clippingViewport = false;
-        this._scaleViewport = false;
-        this._resizeSession = false;
 
         this._showDotCursor = false;
         if (options.showDotCursor !== undefined) {
@@ -316,34 +308,6 @@ export default class RFB extends EventTargetMixin {
 
     get touchButton() { return 0; }
     set touchButton(button) { Log.Warn("Using old API!"); }
-
-    get clipViewport() { return this._clipViewport; }
-    set clipViewport(viewport) {
-        this._clipViewport = viewport;
-        this._updateClip();
-    }
-
-    get scaleViewport() { return this._scaleViewport; }
-    set scaleViewport(scale) {
-        this._scaleViewport = scale;
-        // Scaling trumps clipping, so we may need to adjust
-        // clipping when enabling or disabling scaling
-        if (scale && this._clipViewport) {
-            this._updateClip();
-        }
-        this._updateScale();
-        if (!scale && this._clipViewport) {
-            this._updateClip();
-        }
-    }
-
-    get resizeSession() { return this._resizeSession; }
-    set resizeSession(resize) {
-        this._resizeSession = resize;
-        if (resize) {
-            this._requestRemoteResize();
-        }
-    }
 
     get showDotCursor() { return this._showDotCursor; }
     set showDotCursor(show) {
@@ -512,18 +476,6 @@ export default class RFB extends EventTargetMixin {
 
             RFB.messages.clientCutText(this._sock, data);
         }
-    }
-
-    getImageData() {
-        return this._display.getImageData();
-    }
-
-    toDataURL(type, encoderOptions) {
-        return this._display.toDataURL(type, encoderOptions);
-    }
-
-    toBlob(callback, type, quality) {
-        return this._display.toBlob(callback, type, quality);
     }
 
     // ===== PRIVATE METHODS =====
@@ -709,63 +661,8 @@ export default class RFB extends EventTargetMixin {
         // If the window resized then our screen element might have
         // as well. Update the viewport dimensions.
         window.requestAnimationFrame(() => {
-            this._updateClip();
-            this._updateScale();
+            this._display._scale = this._display._fbWidth ? Math.min(this._screen.clientWidth / this._display._fbWidth, 1) : 1;
         });
-
-        if (this._resizeSession) {
-            // Request changing the resolution of the remote display to
-            // the size of the local browser viewport.
-
-            // In order to not send multiple requests before the browser-resize
-            // is finished we wait 0.5 seconds before sending the request.
-            clearTimeout(this._resizeTimeout);
-            this._resizeTimeout = setTimeout(this._requestRemoteResize.bind(this), 500);
-        }
-    }
-
-    // Update state of clipping in Display object, and make sure the
-    // configured viewport matches the current screen size
-    _updateClip() {
-        const curClip = this._display.clipViewport;
-        let newClip = this._clipViewport;
-
-        if (this._scaleViewport) {
-            // Disable viewport clipping if we are scaling
-            newClip = false;
-        }
-
-        if (curClip !== newClip) {
-            this._display.clipViewport = newClip;
-        }
-
-        if (newClip) {
-            // When clipping is enabled, the screen is limited to
-            // the size of the container.
-            const size = this._screenSize();
-            this._display.viewportChangeSize(size.w, size.h);
-            this._fixScrollbars();
-            this._setClippingViewport(size.w < this._display.width ||
-                                      size.h < this._display.height);
-        } else {
-            this._setClippingViewport(false);
-        }
-
-        // When changing clipping we might show or hide scrollbars.
-        // This causes the expected client dimensions to change.
-        if (curClip !== newClip) {
-            this._saveExpectedClientSize();
-        }
-    }
-
-    _updateScale() {
-        if (!this._scaleViewport) {
-            this._display.scale = 1.0;
-        } else {
-            const size = this._screenSize();
-            this._display.autoscale(size.w, size.h);
-        }
-        this._fixScrollbars();
     }
 
     // Requests a change of remote desktop size. This message is an extension
@@ -774,8 +671,7 @@ export default class RFB extends EventTargetMixin {
         clearTimeout(this._resizeTimeout);
         this._resizeTimeout = null;
 
-        if (!this._resizeSession || this._viewOnly ||
-            !this._supportsSetDesktopSize) {
+        if (this._viewOnly || !this._supportsSetDesktopSize) {
             return;
         }
 
@@ -1030,30 +926,6 @@ export default class RFB extends EventTargetMixin {
     }
 
     _handleMouseButton(x, y, down, bmask) {
-        if (this.dragViewport) {
-            if (down && !this._viewportDragging) {
-                this._viewportDragging = true;
-                this._viewportDragPos = {'x': x, 'y': y};
-                this._viewportHasMoved = false;
-
-                // Skip sending mouse events
-                return;
-            } else {
-                this._viewportDragging = false;
-
-                // If we actually performed a drag then we are done
-                // here and should not send any mouse events
-                if (this._viewportHasMoved) {
-                    return;
-                }
-
-                // Otherwise we treat this as a mouse click event.
-                // Send the button down event here, as the button up
-                // event is sent at the end of this function.
-                this._sendMouse(x, y, bmask);
-            }
-        }
-
         // Flush waiting move event first
         if (this._mouseMoveTimer !== null) {
             clearTimeout(this._mouseMoveTimer);
@@ -1071,22 +943,6 @@ export default class RFB extends EventTargetMixin {
     }
 
     _handleMouseMove(x, y) {
-        if (this._viewportDragging) {
-            const deltaX = this._viewportDragPos.x - x;
-            const deltaY = this._viewportDragPos.y - y;
-
-            if (this._viewportHasMoved || (Math.abs(deltaX) > dragThreshold ||
-                                           Math.abs(deltaY) > dragThreshold)) {
-                this._viewportHasMoved = true;
-
-                this._viewportDragPos = {'x': x, 'y': y};
-                this._display.viewportChangePos(deltaX, deltaY);
-            }
-
-            // Skip sending mouse events
-            return;
-        }
-
         this._mousePos = { 'x': x, 'y': y };
 
         // Limit many mouse move events to one every MOUSE_MOVE_DELAY ms
@@ -2422,21 +2278,6 @@ export default class RFB extends EventTargetMixin {
             if (this._sock.rQwait("FBU header", 3, 1)) { return false; }
             this._sock.rQskipBytes(1);  // Padding
             this._FBU.rects = this._sock.rQshift16();
-
-            // Make sure the previous frame is fully rendered first
-            // to avoid building up an excessive queue
-            if (this._display.pending()) {
-                this._flushing = true;
-                this._display.flush()
-                    .then(() => {
-                        this._flushing = false;
-                        // Resume processing
-                        if (!this._sock.rQwait("message", 1)) {
-                            this._handleMessage();
-                        }
-                    });
-                return false;
-            }
         }
 
         while (this._FBU.rects > 0) {
@@ -2460,8 +2301,6 @@ export default class RFB extends EventTargetMixin {
             this._FBU.rects--;
             this._FBU.encoding = null;
         }
-
-        this._display.flip();
 
         return true;  // We finished this FBU
     }
@@ -2776,14 +2615,7 @@ export default class RFB extends EventTargetMixin {
 
         this._display.resize(this._fbWidth, this._fbHeight);
 
-        // Adjust the visible viewport based on the new dimensions
-        this._updateClip();
-        this._updateScale();
-
         this._updateContinuousUpdates();
-
-        // Keep this size until browser client size changes
-        this._saveExpectedClientSize();
     }
 
     _xvpOp(ver, op) {
