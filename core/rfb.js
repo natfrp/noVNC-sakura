@@ -27,14 +27,7 @@ import { encodings } from "./encodings.js";
 import RSAAESAuthenticationState from "./ra2.js";
 import legacyCrypto from "./crypto/crypto.js";
 
-import RawDecoder from "./decoders/raw.js";
-import CopyRectDecoder from "./decoders/copyrect.js";
-import RREDecoder from "./decoders/rre.js";
-import HextileDecoder from "./decoders/hextile.js";
-import TightDecoder from "./decoders/tight.js";
-import TightPNGDecoder from "./decoders/tightpng.js";
-import ZRLEDecoder from "./decoders/zrle.js";
-import JPEGDecoder from "./decoders/jpeg.js";
+import H264Decoder from './decoders/h264.js';
 
 // How many seconds to wait for a disconnect to finish
 const DISCONNECT_TIMEOUT = 3;
@@ -240,14 +233,8 @@ export default class RFB extends EventTargetMixin {
         this._cursorImage = RFB.cursors.none;
 
         // populate decoder array with objects
-        this._decoders[encodings.encodingRaw] = new RawDecoder();
-        this._decoders[encodings.encodingCopyRect] = new CopyRectDecoder();
-        this._decoders[encodings.encodingRRE] = new RREDecoder();
-        this._decoders[encodings.encodingHextile] = new HextileDecoder();
-        this._decoders[encodings.encodingTight] = new TightDecoder();
-        this._decoders[encodings.encodingTightPNG] = new TightPNGDecoder();
-        this._decoders[encodings.encodingZRLE] = new ZRLEDecoder();
-        this._decoders[encodings.encodingJPEG] = new JPEGDecoder();
+        this._decoders[encodings.encodingH264] = new H264Decoder();
+        this._decoders[encodings.encodingOpenH264] = new H264Decoder();
 
         // NB: nothing that needs explicit teardown should be done
         // before this point, since this can throw an exception
@@ -2082,41 +2069,7 @@ export default class RFB extends EventTargetMixin {
     }
 
     _sendEncodings() {
-        const encs = [];
-
-        // In preference order
-        encs.push(encodings.encodingCopyRect);
-        // Only supported with full depth support
-        if (this._fbDepth == 24) {
-            encs.push(encodings.encodingTight);
-            encs.push(encodings.encodingTightPNG);
-            encs.push(encodings.encodingZRLE);
-            encs.push(encodings.encodingJPEG);
-            encs.push(encodings.encodingHextile);
-            encs.push(encodings.encodingRRE);
-        }
-        encs.push(encodings.encodingRaw);
-
-        // Psuedo-encoding settings
-        encs.push(encodings.pseudoEncodingQualityLevel0 + this._qualityLevel);
-        encs.push(encodings.pseudoEncodingCompressLevel0 + this._compressionLevel);
-
-        encs.push(encodings.pseudoEncodingDesktopSize);
-        encs.push(encodings.pseudoEncodingLastRect);
-        encs.push(encodings.pseudoEncodingQEMUExtendedKeyEvent);
-        encs.push(encodings.pseudoEncodingExtendedDesktopSize);
-        encs.push(encodings.pseudoEncodingXvp);
-        encs.push(encodings.pseudoEncodingFence);
-        encs.push(encodings.pseudoEncodingContinuousUpdates);
-        encs.push(encodings.pseudoEncodingDesktopName);
-        encs.push(encodings.pseudoEncodingExtendedClipboard);
-
-        if (this._fbDepth == 24) {
-            encs.push(encodings.pseudoEncodingVMwareCursor);
-            encs.push(encodings.pseudoEncodingCursor);
-        }
-
-        RFB.messages.clientEncodings(this._sock, encs);
+        RFB.messages.clientEncodings(this._sock, [encodings.encodingH264, encodings.encodingOpenH264]);
     }
 
     /* RFB protocol initialization states:

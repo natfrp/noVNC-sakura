@@ -7,14 +7,8 @@
  */
 
 export const encodings = {
-    encodingRaw: 0,
-    encodingCopyRect: 1,
-    encodingRRE: 2,
-    encodingHextile: 5,
-    encodingTight: 7,
-    encodingZRLE: 16,
-    encodingTightPNG: -260,
-    encodingJPEG: 21,
+    encodingH264: 0x14,
+    encodingOpenH264: 0x32,
 
     pseudoEncodingQualityLevel9: -23,
     pseudoEncodingQualityLevel0: -32,
@@ -35,14 +29,8 @@ export const encodings = {
 
 export function encodingName(num) {
     switch (num) {
-        case encodings.encodingRaw:      return "Raw";
-        case encodings.encodingCopyRect: return "CopyRect";
-        case encodings.encodingRRE:      return "RRE";
-        case encodings.encodingHextile:  return "Hextile";
-        case encodings.encodingTight:    return "Tight";
-        case encodings.encodingZRLE:     return "ZRLE";
-        case encodings.encodingTightPNG: return "TightPNG";
-        case encodings.encodingJPEG:     return "JPEG";
+        case encodings.encodingH264:     return "H.264";
+        case encodings.encodingOpenH264: return "Open H.264";
         default:                         return "[unknown encoding " + num + "]";
     }
 }

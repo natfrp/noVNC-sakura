@@ -313,102 +313,11 @@ export default class Display {
         }
     }
 
-    fillRect(x, y, width, height, color, fromQueue) {
-        if (this._renderQ.length !== 0 && !fromQueue) {
-            this._renderQPush({
-                'type': 'fill',
-                'x': x,
-                'y': y,
-                'width': width,
-                'height': height,
-                'color': color
-            });
-        } else {
-            this._setFillColor(color);
-            this._drawCtx.fillRect(x, y, width, height);
-            this._damage(x, y, width, height);
-        }
-    }
-
-    copyImage(oldX, oldY, newX, newY, w, h, fromQueue) {
-        if (this._renderQ.length !== 0 && !fromQueue) {
-            this._renderQPush({
-                'type': 'copy',
-                'oldX': oldX,
-                'oldY': oldY,
-                'x': newX,
-                'y': newY,
-                'width': w,
-                'height': h,
-            });
-        } else {
-            // Due to this bug among others [1] we need to disable the image-smoothing to
-            // avoid getting a blur effect when copying data.
-            //
-            // 1. https://bugzilla.mozilla.org/show_bug.cgi?id=1194719
-            //
-            // We need to set these every time since all properties are reset
-            // when the the size is changed
-            this._drawCtx.mozImageSmoothingEnabled = false;
-            this._drawCtx.webkitImageSmoothingEnabled = false;
-            this._drawCtx.msImageSmoothingEnabled = false;
-            this._drawCtx.imageSmoothingEnabled = false;
-
-            this._drawCtx.drawImage(this._backbuffer,
-                                    oldX, oldY, w, h,
-                                    newX, newY, w, h);
-            this._damage(newX, newY, w, h);
-        }
-    }
-
-    imageRect(x, y, width, height, mime, arr) {
-        /* The internal logic cannot handle empty images, so bail early */
-        if ((width === 0) || (height === 0)) {
-            return;
-        }
-
-        const img = new Image();
-        img.src = "data: " + mime + ";base64," + Base64.encode(arr);
-
+    frame(frame) {
         this._renderQPush({
-            'type': 'img',
-            'img': img,
-            'x': x,
-            'y': y,
-            'width': width,
-            'height': height
+            'type': 'frame',
+            'frame': frame,
         });
-    }
-
-    blitImage(x, y, width, height, arr, offset, fromQueue) {
-        if (this._renderQ.length !== 0 && !fromQueue) {
-            // NB(directxman12): it's technically more performant here to use preallocated arrays,
-            // but it's a lot of extra work for not a lot of payoff -- if we're using the render queue,
-            // this probably isn't getting called *nearly* as much
-            const newArr = new Uint8Array(width * height * 4);
-            newArr.set(new Uint8Array(arr.buffer, 0, newArr.length));
-            this._renderQPush({
-                'type': 'blit',
-                'data': newArr,
-                'x': x,
-                'y': y,
-                'width': width,
-                'height': height,
-            });
-        } else {
-            // NB(directxman12): arr must be an Type Array view
-            let data = new Uint8ClampedArray(arr.buffer,
-                                             arr.byteOffset + offset,
-                                             width * height * 4);
-            let img = new ImageData(data, width, height);
-            this._drawCtx.putImageData(img, x, y);
-            this._damage(x, y, width, height);
-        }
-    }
-
-    drawImage(img, x, y) {
-        this._drawCtx.drawImage(img, x, y);
-        this._damage(x, y, img.width, img.height);
     }
 
     autoscale(containerWidth, containerHeight) {
@@ -485,31 +394,9 @@ export default class Display {
                 case 'flip':
                     this.flip(true);
                     break;
-                case 'copy':
-                    this.copyImage(a.oldX, a.oldY, a.x, a.y, a.width, a.height, true);
-                    break;
-                case 'fill':
-                    this.fillRect(a.x, a.y, a.width, a.height, a.color, true);
-                    break;
-                case 'blit':
-                    this.blitImage(a.x, a.y, a.width, a.height, a.data, 0, true);
-                    break;
-                case 'img':
-                    if (a.img.complete) {
-                        if (a.img.width !== a.width || a.img.height !== a.height) {
-                            Log.Error("Decoded image has incorrect dimensions. Got " +
-                                      a.img.width + "x" + a.img.height + ". Expected " +
-                                      a.width + "x" + a.height + ".");
-                            return;
-                        }
-                        this.drawImage(a.img, a.x, a.y);
-                    } else {
-                        a.img._noVNCDisplay = this;
-                        a.img.addEventListener('load', this._resumeRenderQ);
-                        // We need to wait for this image to 'load'
-                        // to keep things in-order
-                        ready = false;
-                    }
+                case 'frame':
+                    this._drawCtx.drawImage(a.frame, 0, 0, a.frame.displayWidth, a.frame.displayHeight);
+                    this._damage(0, 0, a.frame.displayWidth, a.frame.displayHeight);
                     break;
             }
 
