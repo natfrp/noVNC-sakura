@@ -6,6 +6,7 @@ export default class H264Decoder {
         }
 
         const flag = sock.rQshift32();
+        const data = sock.rQshiftBytes(length);
 
         if (!this.decoder) {
             this.decoder = new VideoDecoder({
@@ -18,13 +19,21 @@ export default class H264Decoder {
                     console.error(e);
                 }
             });
-            this.decoder.configure({ codec: 'avc1.42001e' });
+
+            const codec = 'avc1.' + [...data.slice(5, 8)].map(x => x.toString(16).padStart(2, '0')).join('');
+            this.decoder.configure({
+                codec,
+                avc: { format: 'annexb' },
+                optimizeForLatency: true,
+                hardwareAcceleration: 'prefer-hardware',
+            });
+            console.debug('video decoder configured: ' + codec);
         }
 
         this.decoder.decode(new EncodedVideoChunk({
             type: 'key',
             timestamp: 0,
-            data: sock.rQshiftBytes(length),
+            data,
         }));
 
         return true;
