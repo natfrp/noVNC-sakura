@@ -661,7 +661,7 @@ export default class RFB extends EventTargetMixin {
         // If the window resized then our screen element might have
         // as well. Update the viewport dimensions.
         window.requestAnimationFrame(() => {
-            this._display._scale = this._display._fbWidth ? Math.min(this._screen.clientWidth / this._display._fbWidth, 1) : 1;
+            this._display.screenResize(this._screen.clientWidth);
         });
     }
 

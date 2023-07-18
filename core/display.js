@@ -14,6 +14,7 @@ export default class Display {
         // the full frame buffer (logical canvas) size
         this._fbWidth = 0;
         this._fbHeight = 0;
+        this._scWidth = 0;
 
         Log.Debug(">> Display.constructor");
 
@@ -53,9 +54,18 @@ export default class Display {
         return toSigned32bit(y / this._scale);
     }
 
+    screenResize(width) {
+        this._scWidth = width;
+        if (this._fbWidth) {
+            this._scale = Math.min(width / this._fbWidth, 1);
+        }
+    }
+
     resize(width, height) {
         this._fbWidth = width;
         this._fbHeight = height;
+
+        this._scale = Math.min(this._scWidth / this._fbWidth, 1);
 
         this._target.width = width * this._scale;
         this._target.height = height * this._scale;
