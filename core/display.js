@@ -42,6 +42,8 @@ export default class Display {
         // ===== PROPERTIES =====
 
         this._scale = 1;
+        this._frames = 0;
+        this._firstFrame = null;
     }
 
     // ===== PUBLIC METHODS =====
@@ -72,6 +74,14 @@ export default class Display {
     }
 
     frame(frame) {
+        if (this._firstFrame === null) {
+            this._firstFrame = performance.now();
+        }
+        this._frames++;
         this._targetCtx.drawImage(frame, 0, 0, this._target.width, this._target.height);
+    }
+
+    fps() {
+        return this._firstFrame === null ? 0 : (this._frames / (performance.now() - this._firstFrame) * 1000);
     }
 }

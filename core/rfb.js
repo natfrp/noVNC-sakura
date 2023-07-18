@@ -478,6 +478,10 @@ export default class RFB extends EventTargetMixin {
         }
     }
 
+    fps() {
+        return this._display.fps();
+    }
+
     // ===== PRIVATE METHODS =====
 
     _connect() {
