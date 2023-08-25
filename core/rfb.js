@@ -1929,7 +1929,26 @@ export default class RFB extends EventTargetMixin {
     }
 
     _sendEncodings() {
-        RFB.messages.clientEncodings(this._sock, [encodings.encodingH264, encodings.encodingOpenH264]);
+        RFB.messages.clientEncodings(this._sock, [
+            encodings.encodingH264,
+            encodings.encodingOpenH264,
+
+            encodings.pseudoEncodingQualityLevel0 + this._qualityLevel,
+            encodings.pseudoEncodingCompressLevel0 + this._compressionLevel,
+
+            encodings.pseudoEncodingDesktopSize,
+            encodings.pseudoEncodingLastRect,
+            encodings.pseudoEncodingQEMUExtendedKeyEvent,
+            encodings.pseudoEncodingExtendedDesktopSize,
+            encodings.pseudoEncodingXvp,
+            encodings.pseudoEncodingFence,
+            encodings.pseudoEncodingContinuousUpdates,
+            encodings.pseudoEncodingDesktopName,
+            encodings.pseudoEncodingExtendedClipboard,
+
+            encodings.pseudoEncodingVMwareCursor,
+            encodings.pseudoEncodingCursor,
+        ]);
     }
 
     /* RFB protocol initialization states:
@@ -2329,7 +2348,15 @@ export default class RFB extends EventTargetMixin {
                 return this._handleDesktopName();
 
             case encodings.pseudoEncodingDesktopSize:
+                const resetDecoder = this._fbWidth !== this._FBU.width || this._fbHeight !== this._FBU.height;
+
                 this._resize(this._FBU.width, this._FBU.height);
+
+                if (resetDecoder) {
+                    for (const i in this._decoders) {
+                        this._decoders[i].reset?.();
+                    }
+                }
                 return true;
 
             case encodings.pseudoEncodingExtendedDesktopSize:

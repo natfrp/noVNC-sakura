@@ -38,4 +38,13 @@ export default class H264Decoder {
 
         return true;
     }
+
+    reset() {
+        if (this.decoder) {
+            console.debug('video decoder reset');
+
+            this.decoder.close();
+            this.decoder = null;
+        }
+    }
 }
