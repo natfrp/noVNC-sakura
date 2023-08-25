@@ -74,10 +74,12 @@ export default class Display {
     }
 
     frame(frame) {
-        if (this._firstFrame === null) {
+        if (++this._frames > 60 * 10) {
+            this._frames = 1;
+            this._firstFrame = performance.now();
+        } else if (this._firstFrame === null) {
             this._firstFrame = performance.now();
         }
-        this._frames++;
         this._targetCtx.drawImage(frame, 0, 0, this._target.width, this._target.height);
     }
 
