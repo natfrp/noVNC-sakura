@@ -2249,12 +2249,7 @@ export default class RFB extends EventTargetMixin {
         let first, ret;
         switch (msgType) {
             case 0:  // FramebufferUpdate
-                ret = this._framebufferUpdate();
-                if (ret && !this._enabledContinuousUpdates) {
-                    RFB.messages.fbUpdateRequest(this._sock, true, 0, 0,
-                                                 this._fbWidth, this._fbHeight);
-                }
-                return ret;
+                return this._framebufferUpdate();
 
             case 1:  // SetColorMapEntries
                 return this._handleSetColourMapMsg();
