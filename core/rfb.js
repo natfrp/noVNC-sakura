@@ -179,6 +179,10 @@ export default class RFB extends EventTargetMixin {
         this._accumulatedWheelDeltaX = 0;
         this._accumulatedWheelDeltaY = 0;
 
+        // Mouse relative support
+        this._pointerLocked = false;
+        this._mouseRelativeMode = false;
+
         // Gesture state
         this._gestureLastTapTime = null;
         this._gestureFirstDoubleTapEv = null;
@@ -194,6 +198,8 @@ export default class RFB extends EventTargetMixin {
             handleGesture: this._handleGesture.bind(this),
             handleRSAAESCredentialsRequired: this._handleRSAAESCredentialsRequired.bind(this),
             handleRSAAESServerVerification: this._handleRSAAESServerVerification.bind(this),
+
+            handlePointerLock: this._handlePointerLock.bind(this),
         };
 
         // main setup
@@ -539,6 +545,8 @@ export default class RFB extends EventTargetMixin {
         this._canvas.addEventListener("gesturemove", this._eventHandlers.handleGesture);
         this._canvas.addEventListener("gestureend", this._eventHandlers.handleGesture);
 
+        document.addEventListener('pointerlockchange', this._eventHandlers.handlePointerLock);
+
         Log.Debug("<< RFB.connect");
     }
 
@@ -556,6 +564,7 @@ export default class RFB extends EventTargetMixin {
         this._canvas.removeEventListener('contextmenu', this._eventHandlers.handleMouse);
         this._canvas.removeEventListener("mousedown", this._eventHandlers.focusCanvas);
         this._canvas.removeEventListener("touchstart", this._eventHandlers.focusCanvas);
+        document.removeEventListener('pointerlockchange', this._eventHandlers.handlePointerLock);
         this._resizeObserver.disconnect();
         this._keyboard.ungrab();
         this._gestures.detach();
@@ -909,19 +918,32 @@ export default class RFB extends EventTargetMixin {
         if ((ev.type === 'click') || (ev.type === 'contextmenu')) {
             return;
         }
+        if (this._mouseRelativeMode && !this._pointerLocked) {
+            if (ev.type === 'mouseup') {
+                this._canvas.requestPointerLock();
+            }
+            return;
+        }
 
-        let pos = clientToElement(ev.clientX, ev.clientY,
-                                  this._canvas);
+        let pos = this._mouseRelativeMode ?
+            { x: ev.movementX, y: ev.movementY }
+            : clientToElement(ev.clientX, ev.clientY, this._canvas);
 
         switch (ev.type) {
             case 'mousedown':
                 setCapture(this._canvas);
-                this._handleMouseButton(pos.x, pos.y,
-                                        true, 1 << ev.button);
+                if (this._mouseRelativeMode) {
+                    this._handleMouseButton(0, 0, true, 1 << ev.button);
+                } else {
+                    this._handleMouseButton(pos.x, pos.y, true, 1 << ev.button);
+                }
                 break;
             case 'mouseup':
-                this._handleMouseButton(pos.x, pos.y,
-                                        false, 1 << ev.button);
+                if (this._mouseRelativeMode) {
+                    this._handleMouseButton(0, 0, false, 1 << ev.button);
+                } else {
+                    this._handleMouseButton(pos.x, pos.y, false, 1 << ev.button);
+                }
                 break;
             case 'mousemove':
                 this._handleMouseMove(pos.x, pos.y);
@@ -947,7 +969,12 @@ export default class RFB extends EventTargetMixin {
     }
 
     _handleMouseMove(x, y) {
-        this._mousePos = { 'x': x, 'y': y };
+        if (this._mouseRelativeMode) {
+            this._mousePos.x += x;
+            this._mousePos.y += y;
+        } else {
+            this._mousePos = { 'x': x, 'y': y };
+        }
 
         // Limit many mouse move events to one every MOUSE_MOVE_DELAY ms
         if (this._mouseMoveTimer == null) {
@@ -955,6 +982,9 @@ export default class RFB extends EventTargetMixin {
             const timeSinceLastMove = Date.now() - this._mouseLastMoveTime;
             if (timeSinceLastMove > MOUSE_MOVE_DELAY) {
                 this._sendMouse(x, y, this._mouseButtonMask);
+                if (this._mouseRelativeMode) {
+                    this._mousePos = { 'x': 0, 'y': 0 };
+                }
                 this._mouseLastMoveTime = Date.now();
             } else {
                 // Too soon since the latest move, wait the remaining time
@@ -969,6 +999,9 @@ export default class RFB extends EventTargetMixin {
         this._mouseMoveTimer = null;
         this._sendMouse(this._mousePos.x, this._mousePos.y,
                         this._mouseButtonMask);
+        if (this._mouseRelativeMode) {
+            this._mousePos = { 'x': 0, 'y': 0 };
+        }
         this._mouseLastMoveTime = Date.now();
     }
 
@@ -987,8 +1020,9 @@ export default class RFB extends EventTargetMixin {
         ev.stopPropagation();
         ev.preventDefault();
 
-        let pos = clientToElement(ev.clientX, ev.clientY,
-                                  this._canvas);
+        let pos = this._mouseRelativeMode ?
+            { x: 0, y: 0 } :
+            clientToElement(ev.clientX, ev.clientY, this._canvas);
 
         let dX = ev.deltaX;
         let dY = ev.deltaY;
@@ -1033,6 +1067,10 @@ export default class RFB extends EventTargetMixin {
 
             this._accumulatedWheelDeltaY = 0;
         }
+    }
+
+    _handlePointerLock() {
+        this._pointerLocked = document.pointerLockElement === this._canvas;
     }
 
     _fakeMouseMove(ev, elementX, elementY) {
